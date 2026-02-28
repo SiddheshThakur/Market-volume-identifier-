@@ -5,8 +5,20 @@ import pandas as pd
 import numpy as np
 import requests
 import time
+import logging
+import sys
 
 import config
+
+# Setup Logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("bot_activity.log"),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 
 # STEP 5 - Define Trading Sessions
 def parse_time(time_str):
@@ -27,8 +39,7 @@ TIMEFRAME = mt5.TIMEFRAME_M5
 def send_telegram_alert(message):
     """STEP 10 - Telegram Alert Function"""
     if config.BOT_TOKEN == "your_token_here" or config.CHAT_ID == "your_chat_id_here":
-        print("Telegram Alert (Not Sent - Please configure config.py):")
-        print(message)
+        logging.warning("Telegram Alert (Not Sent - Please configure config.py):\n" + message)
         return
         
     url = f"https://api.telegram.org/bot{config.BOT_TOKEN}/sendMessage"
@@ -41,7 +52,7 @@ def send_telegram_alert(message):
         response = requests.post(url, json=payload, timeout=10)
         response.raise_for_status()
     except Exception as e:
-        print(f"Failed to send Telegram alert: {e}")
+        logging.error(f"Failed to send Telegram alert: {e}")
 
 def get_recent_candles(n=1000):
     """STEP 4 - Pull M5 candles (increased to 1000 to get prev day)"""
@@ -110,7 +121,7 @@ def analyze_market():
     
     df = get_recent_candles(1000)
     if df is None or len(df) < 50:
-        print("Not enough data to analyze")
+        logging.warning("Not enough data to analyze")
         return
         
     df = calculate_atr(df, period=config.ATR_PERIOD)
@@ -156,9 +167,9 @@ def analyze_market():
             sweep_level = "Low" if bullish_sweep else "High"
             
             # STEP 12 - Print for Testing Phase validation
-            print(f"[{closed_time}] {session_name} {sweep_level} Sweep detected. Direction: {direction}")
-            print(f"Volume Spike: {'YES' if is_volume_spike else 'NO'} (Vol: {current_volume}, Avg: {avg_volume:.2f})")
-            print(f"Displacement: {'YES' if has_displacement else 'NO'} (Range: {candle_range:.2f}, ATR: {atr_value:.2f})")
+            logging.info(f"[{closed_time}] {session_name} {sweep_level} Sweep detected. Direction: {direction}")
+            logging.info(f"Volume Spike: {'YES' if is_volume_spike else 'NO'} (Vol: {current_volume}, Avg: {avg_volume:.2f})")
+            logging.info(f"Displacement: {'YES' if has_displacement else 'NO'} (Range: {candle_range:.2f}, ATR: {atr_value:.2f})")
             
             # Condition check
             if is_volume_spike and has_displacement:
@@ -171,29 +182,29 @@ def analyze_market():
                     f"<i>Displacement Confirmed</i>"
                 )
                  send_telegram_alert(message)
-                 print("--> Alert Sent!")
+                 logging.info("--> Alert Sent!")
                  
                  # Break out once we send an alert to avoid double-firing for two sessions simultaneously
                  break
 
 def main():
-    print("Starting XAUUSD Liquidity Sweep Detector...")
+    logging.info("Starting XAUUSD Liquidity Sweep Detector...")
     
     # STEP 4 - Initialize MT5
     if not mt5.initialize():
-        print(f"initialize() failed, error code = {mt5.last_error()}")
+        logging.error(f"initialize() failed, error code = {mt5.last_error()}")
         return
         
-    print(f"MT5 Initialized. Version: {mt5.version()}")
+    logging.info(f"MT5 Initialized. Version: {mt5.version()}")
     
     # Select Symbol
     if not mt5.symbol_select(SYMBOL, True):
-        print(f"Failed to select {SYMBOL}!")
+        logging.error(f"Failed to select {SYMBOL}!")
         mt5.shutdown()
         return
         
-    print(f"Successfully selected {SYMBOL}. Listening for sweeps...")
-    print("Press Ctrl+C to exit.")
+    logging.info(f"Successfully selected {SYMBOL}. Listening for sweeps...")
+    logging.info("Press Ctrl+C to exit.")
     
     # STEP 11 - Run Bot Continuously
     # We check periodically. A new M5 candle appears every 5 minutes.
@@ -201,13 +212,20 @@ def main():
         while True:
             # We add a try-except to prevent crashes breaking the loop
             try:
+                # Disconnection Check
+                ti = mt5.terminal_info()
+                if ti is None or not ti.connected:
+                    logging.warning("MT5 disconnected! Attempting to reconnect...")
+                    mt5.initialize()
+                    mt5.symbol_select(SYMBOL, True)
+                    
                 analyze_market()
             except Exception as e:
-                print(f"Error during analysis: {e}")
+                logging.error(f"Error during analysis: {e}")
                 
             time.sleep(60) # check every 60 seconds
     except KeyboardInterrupt:
-        print("\nBot stopped by user.")
+        logging.info("Bot stopped by user.")
     finally:
         mt5.shutdown()
 
