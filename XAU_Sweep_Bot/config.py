@@ -1,7 +1,12 @@
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 # Telegram Bot Configuration
 # Step 3: Create Telegram Bot (Free) via @BotFather
-BOT_TOKEN = "8700456285:AAHoenZFRiICU_LiLAWJMOQPNw41GelYRh0"
-CHAT_ID = "1353179116"
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+CHAT_ID = os.getenv("CHAT_ID", "")
 
 # --- Trading Strategy Configuration ---
 SYMBOL = "XAUUSD"
