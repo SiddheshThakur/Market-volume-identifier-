@@ -1,7 +1,7 @@
 # Telegram Bot Configuration
 # Step 3: Create Telegram Bot (Free) via @BotFather
-BOT_TOKEN = "your_token_here"
-CHAT_ID = "your_chat_id_here"
+BOT_TOKEN = "8700456285:AAHoenZFRiICU_LiLAWJMOQPNw41GelYRh0"
+CHAT_ID = "1353179116"
 
 # --- Trading Strategy Configuration ---
 SYMBOL = "XAUUSD"

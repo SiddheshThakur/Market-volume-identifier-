@@ -1,0 +1,7 @@
+2026-03-02 23:34:47,030 - INFO - Starting XAUUSD Liquidity Sweep Detector...
+2026-03-02 23:34:47,048 - INFO - MT5 Initialized. Version: (500, 5660, '27 Feb 2026')
+2026-03-02 23:34:47,049 - INFO - Successfully selected XAUUSD. Listening for sweeps...
+2026-03-02 23:34:47,049 - INFO - Press Ctrl+C to exit.
+2026-03-02 23:34:47,096 - INFO - [2026-03-02 19:55:00] Asia Low Sweep detected. Direction: BUY
+2026-03-02 23:34:47,097 - INFO - Volume Spike: NO (Vol: 3126, Avg: 3690.80)
+2026-03-02 23:34:47,097 - INFO - Displacement: NO (Range: 7.45, ATR: 10.31)
