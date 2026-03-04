@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import requests
 import time
+import math
 import logging
 import sys
 
@@ -53,6 +54,72 @@ def send_telegram_alert(message):
         response.raise_for_status()
     except Exception as e:
         logging.error(f"Failed to send Telegram alert: {e}")
+
+def calculate_position(sl_distance_usd):
+    """Calculate the lot size based on fixed USD amount."""
+    if config.RISK_PER_TRADE_USD <= 0:
+        return config.MIN_LOT_SIZE
+        
+    symbol_info = mt5.symbol_info(config.SYMBOL)
+    if symbol_info is None:
+        return config.MIN_LOT_SIZE
+        
+    contract_size = symbol_info.trade_contract_size if hasattr(symbol_info, 'trade_contract_size') else 100.0
+    
+    if sl_distance_usd == 0:
+        return config.MIN_LOT_SIZE
+        
+    lot_size = config.RISK_PER_TRADE_USD / (sl_distance_usd * contract_size)
+    lot_size = max(config.MIN_LOT_SIZE, min(float(config.MAX_LOT_SIZE), lot_size))
+    
+    # Round to MT5 step
+    step = symbol_info.volume_step if hasattr(symbol_info, 'volume_step') else 0.01
+    lot_size = round(lot_size / step) * step
+    return lot_size
+
+def execute_trade(direction, entry_price, sl_price, tp_price):
+    """Execute the live trade via MT5."""
+    symbol_info = mt5.symbol_info(config.SYMBOL)
+    if symbol_info is None or not symbol_info.visible:
+        if not mt5.symbol_select(config.SYMBOL, True):
+            logging.error(f"symbol_select({config.SYMBOL}) failed")
+            return None
+
+    # Calculate Lot Size
+    sl_distance = abs(entry_price - sl_price)
+    lot = calculate_position(sl_distance)
+    
+    order_type = mt5.ORDER_TYPE_BUY if direction == "BUY" else mt5.ORDER_TYPE_SELL
+    price = mt5.symbol_info_tick(config.SYMBOL).ask if direction == "BUY" else mt5.symbol_info_tick(config.SYMBOL).bid
+    
+    request = {
+        "action": mt5.TRADE_ACTION_DEAL,
+        "symbol": config.SYMBOL,
+        "volume": float(lot),
+        "type": order_type,
+        "price": price,
+        "sl": float(sl_price),
+        "tp": float(tp_price),
+        "deviation": 20,
+        "magic": config.MAGIC_NUMBER,
+        "comment": f"XAUSweep {direction}",
+        "type_time": mt5.ORDER_TIME_GTC,
+        "type_filling": mt5.ORDER_FILLING_IOC,
+    }
+    
+    result = mt5.order_send(request)
+    if result.retcode != mt5.TRADE_RETCODE_DONE:
+        logging.error(f"Order failed, retcode={result.retcode}. Trying alternative fill modes...")
+        for mode in [mt5.ORDER_FILLING_FOK, mt5.ORDER_FILLING_RETURN]:
+            request["type_filling"] = mode
+            res = mt5.order_send(request)
+            if res.retcode == mt5.TRADE_RETCODE_DONE:
+                logging.info(f"Order placed with fallback mode {mode}: Ticket {res.order}")
+                return res
+        return None
+        
+    logging.info(f"Order placed successfully: Ticket {result.order}")
+    return result
 
 def get_recent_candles(n=1000):
     """STEP 4 - Pull M5 candles (increased to 1000 to get prev day)"""
@@ -173,16 +240,35 @@ def analyze_market():
             
             # Condition check
             if is_volume_spike and has_displacement:
+                 entry_price = last_closed['close']
+                 
+                 # Calculate Stop Loss and Take Profit
+                 if direction == "BUY":
+                     sl_price = last_closed['low'] - config.SL_BUFFER_USD
+                     tp_price = entry_price + (entry_price - sl_price) * config.RISK_REWARD_RATIO
+                 else:
+                     sl_price = last_closed['high'] + config.SL_BUFFER_USD
+                     tp_price = entry_price - (sl_price - entry_price) * config.RISK_REWARD_RATIO
+                     
+                 # Execute Live Trade
+                 trade_result = execute_trade(direction, entry_price, sl_price, tp_price)
+                 trade_status = "SUCCESS" if trade_result else "FAILED"
+                 ticket_num = getattr(trade_result, 'order', 'N/A') if trade_result else "N/A"
+                 lot_qty = getattr(trade_result, 'volume', 'N/A') if trade_result else "N/A"
+
                  message = (
-                    f"🚨 <b>XAUUSD Sweep Detected</b> 🚨\n\n"
+                    f"🚨 <b>XAUUSD Live Trade Executed</b> 🚨\n\n"
                     f"<b>Session:</b> {session_name} {sweep_level}\n"
                     f"<b>Direction:</b> {direction}\n"
-                    f"<b>Volume Spike:</b> YES\n"
-                    f"<b>Time:</b> {closed_time.strftime('%H:%M')}\n\n"
-                    f"<i>Displacement Confirmed</i>"
+                    f"<b>Execution:</b> {trade_status}\n"
+                    f"<b>Ticket:</b> #{ticket_num} ({lot_qty} Lots)\n"
+                    f"<b>Entry:</b> {entry_price:.2f}\n"
+                    f"<b>Stop Loss:</b> {sl_price:.2f}\n"
+                    f"<b>Take Profit:</b> {tp_price:.2f}\n\n"
+                    f"<i>Volume Spike & Displacement Confirmed</i>"
                 )
                  send_telegram_alert(message)
-                 logging.info("--> Alert Sent!")
+                 logging.info(f"--> Live Trade Attempted: {trade_status}")
                  
                  # Break out once we send an alert to avoid double-firing for two sessions simultaneously
                  break

@@ -155,12 +155,68 @@ def run_backtest(days_back=30):
                 
                 # We check displacement + volume spike
                 if is_volume_spike and has_displacement:
-                    alert_desc = f"[{closed_time}] {session_name} {sweep_level} Sweep | DIR: {direction.ljust(4)} | Vol:{current_volume}/{avg_volume:.0f} | Dsp:{candle_range:.1f}/{atr_value:.1f}"
+                    entry_price = last_closed['close']
+                    
+                    if direction == "BUY":
+                        sl_price = last_closed['low'] - config.SL_BUFFER_USD
+                        tp_price = entry_price + (entry_price - sl_price) * config.RISK_REWARD_RATIO
+                    else: # SELL
+                        sl_price = last_closed['high'] + config.SL_BUFFER_USD
+                        tp_price = entry_price - (sl_price - entry_price) * config.RISK_REWARD_RATIO
+                        
+                    # Simulate trade outcome
+                    trade_outcome = "PENDING"
+                    exit_price = 0.0
+                    exit_time = None
+                    pnl_r = 0.0
+                    
+                    # Scan forward in time starting from the very next candle (i + 1)
+                    for j in range(i + 1, len(df)):
+                        future_candle = df.iloc[j]
+                        
+                        if direction == "BUY":
+                            # Note: To be precise, we check if low hits SL first, or high hits TP first
+                            # For conservative backtesting, if both are hit in same candle, we count as LOSS.
+                            if future_candle['low'] <= sl_price:
+                                trade_outcome = "LOSS"
+                                exit_price = sl_price
+                                exit_time = future_candle['time']
+                                pnl_r = -1.0
+                                break
+                            elif future_candle['high'] >= tp_price:
+                                trade_outcome = "WIN"
+                                exit_price = tp_price
+                                exit_time = future_candle['time']
+                                pnl_r = config.RISK_REWARD_RATIO
+                                break
+                                
+                        elif direction == "SELL":
+                            if future_candle['high'] >= sl_price:
+                                trade_outcome = "LOSS"
+                                exit_price = sl_price
+                                exit_time = future_candle['time']
+                                pnl_r = -1.0
+                                break
+                            elif future_candle['low'] <= tp_price:
+                                trade_outcome = "WIN"
+                                exit_price = tp_price
+                                exit_time = future_candle['time']
+                                pnl_r = config.RISK_REWARD_RATIO
+                                break
+                                
+                    alert_desc = f"[{closed_time}] {session_name} {sweep_level} Sweep | DIR: {direction.ljust(4)} | Outcome: {trade_outcome} | Entry: {entry_price:.2f} | SL: {sl_price:.2f} | TP: {tp_price:.2f}"
                     alerts_triggered.append({
-                        'Time': closed_time,
+                        'Entry_Time': closed_time,
                         'Session Swept': session_name,
                         'Level': sweep_level,
                         'Direction': direction,
+                        'Entry_Price': entry_price,
+                        'Stop_Loss': sl_price,
+                        'Take_Profit': tp_price,
+                        'Exit_Time': exit_time,
+                        'Exit_Price': exit_price,
+                        'Outcome': trade_outcome,
+                        'PnL_R': pnl_r
                     })
                     print(alert_desc)
                     break # Don't double log multiple session sweeps from one candle
@@ -170,6 +226,19 @@ def run_backtest(days_back=30):
     
     if len(alerts_triggered) > 0:
         alerts_df = pd.DataFrame(alerts_triggered)
+        
+        # Calculate overall stats
+        completed_trades = alerts_df[alerts_df['Outcome'] != "PENDING"]
+        wins = len(completed_trades[completed_trades['Outcome'] == 'WIN'])
+        losses = len(completed_trades[completed_trades['Outcome'] == 'LOSS'])
+        total_finished = wins + losses
+        win_rate = (wins / total_finished * 100) if total_finished > 0 else 0
+        total_pnl_r = completed_trades['PnL_R'].sum()
+        
+        print(f"Trades Completed: {total_finished}")
+        print(f"Wins: {wins} | Losses: {losses} | Win Rate: {win_rate:.2f}%")
+        print(f"Total Return in R-Multiples: {total_pnl_r:.2f} R")
+        
         alerts_df.to_csv("backtest_results.csv", index=False)
         print("Detailed results saved to 'backtest_results.csv'")
 
