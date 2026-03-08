@@ -204,15 +204,26 @@ def run_backtest(days_back=30):
                                 pnl_r = config.RISK_REWARD_RATIO
                                 break
                                 
+                    trade_duration = (exit_time - closed_time).total_seconds() / 60 if exit_time else 0
+                    sl_pips = abs(entry_price - sl_price) * 10
+                    tp_pips = abs(tp_price - entry_price) * 10
+                    day_of_week = closed_time.strftime('%A')
+                    
                     alert_desc = f"[{closed_time}] {session_name} {sweep_level} Sweep | DIR: {direction.ljust(4)} | Outcome: {trade_outcome} | Entry: {entry_price:.2f} | SL: {sl_price:.2f} | TP: {tp_price:.2f}"
                     alerts_triggered.append({
                         'Entry_Time': closed_time,
-                        'Session Swept': session_name,
+                        'Day_Of_Week': day_of_week,
+                        'Trade_Duration_Mins': round(trade_duration, 2),
+                        'Session_Swept': session_name,
                         'Level': sweep_level,
                         'Direction': direction,
+                        'Candle_Size_USD': round(candle_range, 2),
+                        'Volume': current_volume,
                         'Entry_Price': entry_price,
                         'Stop_Loss': sl_price,
                         'Take_Profit': tp_price,
+                        'SL_Pips': round(sl_pips, 1),
+                        'TP_Pips': round(tp_pips, 1),
                         'Exit_Time': exit_time,
                         'Exit_Price': exit_price,
                         'Outcome': trade_outcome,
@@ -240,7 +251,11 @@ def run_backtest(days_back=30):
         print(f"Total Return in R-Multiples: {total_pnl_r:.2f} R")
         
         alerts_df.to_csv("backtest_results.csv", index=False)
-        print("Detailed results saved to 'backtest_results.csv'")
+        try:
+            alerts_df.to_excel("backtest_results.xlsx", index=False)
+            print("Detailed results saved to 'backtest_results.xlsx' and 'backtest_results.csv'")
+        except ImportError:
+            print("Detailed results saved to 'backtest_results.csv' (install openpyxl for .xlsx format)")
 
     mt5.shutdown()
 

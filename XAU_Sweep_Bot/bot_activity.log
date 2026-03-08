@@ -5,3 +5,10 @@
 2026-03-02 23:34:47,096 - INFO - [2026-03-02 19:55:00] Asia Low Sweep detected. Direction: BUY
 2026-03-02 23:34:47,097 - INFO - Volume Spike: NO (Vol: 3126, Avg: 3690.80)
 2026-03-02 23:34:47,097 - INFO - Displacement: NO (Range: 7.45, ATR: 10.31)
+2026-03-08 00:35:53,235 - INFO - Starting XAUUSD Liquidity Sweep Detector...
+2026-03-08 00:35:53,244 - INFO - MT5 Initialized. Version: (500, 5665, '3 Mar 2026')
+2026-03-08 00:35:53,244 - INFO - Successfully selected XAUUSD. Listening for sweeps...
+2026-03-08 00:35:53,244 - INFO - Press Ctrl+C to exit.
+2026-03-08 00:35:53,263 - INFO - [2026-03-06 23:50:00] New York High Sweep detected. Direction: SELL
+2026-03-08 00:35:53,263 - INFO - Volume Spike: NO (Vol: 826, Avg: 1333.65)
+2026-03-08 00:35:53,263 - INFO - Displacement: NO (Range: 2.21, ATR: 4.75)
